@@ -8,6 +8,14 @@ def load_hsi(hdr_path):
     img = open_image(hdr_path)
     return img
 
+# Function to normalize hyperspectral image
+def normalize_hsi(original, dark, white):
+    # Normalize using the formula: (original - dark) / (white - dark + 1e-6)
+    calibrated_hsi = (original - dark) / (white - dark + 1e-6)
+    # Handle NaN and infinite values
+    calibrated_hsi = np.nan_to_num(calibrated_hsi, nan=0.0, posinf=0.0, neginf=0.0)
+    return calibrated_hsi
+
 # Function to crop hyperspectral image using bounding box
 def crop_hsi(img, bbox):
     x1, y1, x2, y2 = bbox
@@ -18,13 +26,17 @@ def save_cropped_hsi(cropped_img, output_path):
     np.save(output_path, cropped_img)
 
 # Main function
-def process_hsi_with_bboxes(json_path, hsi_root_dir, output_dir):
+def process_hsi_with_bboxes(json_path, hsi_root_dir, output_dir, dark_path, white_path):
     # Load JSON file
     with open(json_path, "r") as f:
         bbox_data = json.load(f)
 
     # Create output directory if it doesn't exist
     os.makedirs(output_dir, exist_ok=True)
+
+    # Load dark and white reference images
+    dark_img = load_hsi(dark_path).load()
+    white_img = load_hsi(white_path).load()
 
     # Iterate through each entry in the JSON
     for key, bboxes in bbox_data.items():
@@ -37,12 +49,15 @@ def process_hsi_with_bboxes(json_path, hsi_root_dir, output_dir):
             continue
 
         # Load the hyperspectral image
-        hsi_img = load_hsi(hdr_file)
+        hsi_img = load_hsi(hdr_file).load()
+
+        # Normalize the hyperspectral image
+        calibrated_hsi = normalize_hsi(hsi_img, dark_img, white_img)
 
         # Iterate through each bounding box for the current image
         for i, bbox in enumerate(bboxes):
-            # Crop the hyperspectral image
-            cropped_cube = crop_hsi(hsi_img, bbox)
+            # Crop the normalized hyperspectral image
+            cropped_cube = crop_hsi(calibrated_hsi, bbox)
 
             # Save the cropped cube
             output_filename = f"{key}_bbox_{i+1}.npy"
@@ -61,5 +76,9 @@ if __name__ == "__main__":
     # Output directory to save cropped hyperspectral cubes
     output_dir = "/workspace/src/Season_4/Normal/cubes"
 
+    # Paths to dark and white reference images
+    dark_path = "/workspace/src/Season_4/dark_ref/capture/dark_ref.hdr"
+    white_path = "/workspace/src/Season_4/white_ref/capture/white_ref.hdr"
+
     # Process the HSI images using the bounding boxes
-    process_hsi_with_bboxes(json_path, hsi_root_dir, output_dir)
+    process_hsi_with_bboxes(json_path, hsi_root_dir, output_dir, dark_path, white_path)
