@@ -6,13 +6,16 @@ import matplotlib.pyplot as plt
 from spectral import get_rgb
 from ultralytics import YOLO
 import numpy as np
+import cv2
 
 
 
 # Load the model
-model = YOLO("/workspace/src/preprocess/YOLOv8_trained.pt")
+model = YOLO("/workspace/packages/YOLOv8_preprocess/YOLOv8_trained.pt")
 
-imagefile = "/workspace/src/Season_4/Normal/rgb/s1_norm1.png"
+imagefile = "/workspace/src/Season_4/Normal/rgb/s1_norm3.png"
+img = cv2.imread(imagefile) 
+img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
 # Iterate over each image file
 
@@ -32,7 +35,7 @@ if masks is not None:
     box_data = boxes.xyxy.cpu().numpy()  # Get bounding box coordinates
     
     # Create an empty mask image
-    mask_image = np.zeros_like(orig_img)
+    mask_image = np.zeros_like(img)
 
     # Color for visualization (e.g., red with some transparency)
     color = [0, 0, 1]  # Red color in RGB
@@ -43,11 +46,11 @@ if masks is not None:
             mask_image[mask_data[i] > 0] = color  # Set the mask color
 
     # Overlay the mask on the original image
-    overlay_img = np.where(mask_image == 0, orig_img, mask_image * 0.5 + orig_img* 0.5)
+    overlay_img = np.where(mask_image == 0, img, mask_image * 0.5 + img* 0.5)
 
     # Visualization
     plt.figure(figsize=(10, 10))
-    plt.imshow(overlay_img)  # Show the overlaid image
+    plt.imshow(img)  # Show the overlaid image
     for box in box_data:
         # Draw bounding box
         plt.gca().add_patch(plt.Rectangle((box[0], box[1]), box[2] - box[0], box[3] - box[1], 
