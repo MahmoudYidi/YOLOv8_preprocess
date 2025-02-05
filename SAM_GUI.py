@@ -18,7 +18,7 @@ def sam(pixel, reference):
     return np.arccos(np.clip(cos_theta, -1, 1))
 
 # Function to create a mask for the tomato
-def create_tomato_mask(hsi, tomato_signature, threshold=0.17):
+def create_tomato_mask(hsi, tomato_signature, threshold=0.05):
     hsi_flat = hsi.reshape(-1, hsi.shape[2])  # Flatten spatial dimensions
     sam_map = np.array([sam(px, tomato_signature) for px in hsi_flat])
     sam_map = sam_map.reshape(hsi.shape[0], hsi.shape[1])  # Reshape back to 2D
