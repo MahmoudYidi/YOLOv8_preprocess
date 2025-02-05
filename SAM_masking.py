@@ -5,9 +5,7 @@ from spectral import open_image, imshow, save_rgb
 #from spectral.algorithms import sam
 from skimage.morphology import binary_opening, binary_closing
 
-# Global variables to store ROIs
-normal_roi = None
-anomalous_roi = None
+
 
 # Function to load hyperspectral image
 def load_hsi(hdr_path):
@@ -64,6 +62,7 @@ def clean_mask(mask):
     mask = binary_closing(mask)  # Fill small holes
     return mask
 
+
 # Function to apply the mask to the HSI
 def apply_mask(hsi, mask):
     masked_hsi = np.zeros_like(hsi)
@@ -78,37 +77,14 @@ def overlay_mask_on_band(hsi, mask, band_index):
 
 # Main function
 def mask_tomato(hdr_path, threshold=0.1):
-    global normal_roi, anomalous_roi
+    global normal_roi
 
     # Load the hyperspectral image
-    #hsi = load_hsi(hdr_path)
     hsi = np.load(hdr_path)
 
-    # Display the first band for ROI selection
-    plt.figure(figsize=(10, 10))
-    plt.title("Select the ROI for the tomato (Normal and Anomalous)")
-    plt.imshow(hsi[:, :, 146], cmap='gray')  # Display the first band
-
-    # Create a RectangleSelector widget
-    rs = RectangleSelector(
-        plt.gca(),
-        onselect,
-        useblit=True,
-        button=[1],
-        minspanx=2,
-        minspany=2,
-        spancoords='pixels',
-        interactive=True
-    )
-
-    plt.show()
-
-    # Ensure both ROIs are selected
-    if normal_roi is None or anomalous_roi is None:
-        raise ValueError("Both ROIs must be selected.")
-
     # Extract the tomato's spectral signature using the normal ROI
-    tomato_signature = extract_tomato_signature(hsi, normal_roi)
+    #tomato_signature = extract_tomato_signature(hsi, normal_roi)
+    tomato_signature = np.load('/workspace/src/Season_4/Normal/cubes/tomato_sign.npy')
 
     # Create the tomato mask
     mask = create_tomato_mask(hsi, tomato_signature, threshold)
@@ -131,11 +107,10 @@ def mask_tomato(hdr_path, threshold=0.1):
     plt.show()
 
     return masked_hsi, mask
-
 # Example usage
 if __name__ == "__main__":
     # Path to the HSI file
-    hdr_path = '/workspace/src/Season_4/Normal/cubes/s1_norm5_bbox_3.npy'
+    hdr_path = '/workspace/src/Season_4/Normal/cubes/s1_norm7 _bbox_1.npy'
 
     # Mask out everything except the tomato
     masked_hsi, mask = mask_tomato(hdr_path, threshold=0.25)
