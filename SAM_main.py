@@ -130,7 +130,8 @@ def segment_tomato_in_image(hdr_path, tomato_signature, threshold=0.05):
 
 if __name__ == "__main__":
     # Step 1: Select ROI and extract reference signature from one image
-    reference_image_path = "/workspace/src/Season_4/Normal/cubes/s1_norm10_bbox_2.npy"
+    #reference_image_path = "/workspace/src/Season_4/Normal/cubes/s1_norm10_bbox_2.npy"
+    reference_image_path = "/workspace/src/Season_4/Normal/masked_cubes/s1_norm1_bbox_1.npy"
     tomato_signature = select_roi_and_extract_signature(reference_image_path)
 
     # Step 2: Read all .npy files in the directory dynamically
