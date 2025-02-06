@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.widgets import RectangleSelector
 from skimage.morphology import binary_opening, binary_closing
-
+import glob
 # Global variables to store ROIs
 normal_roi = None
 
@@ -102,7 +102,7 @@ def select_roi_and_extract_signature(hdr_path):
     return tomato_signature
 
 # Function to segment tomatoes in other images
-def segment_tomato_in_image(hdr_path, tomato_signature, threshold=0.1):
+def segment_tomato_in_image(hdr_path, tomato_signature, threshold=0.05):
     # Load the hyperspectral image
     hsi = np.load(hdr_path)
 
@@ -128,19 +128,22 @@ def segment_tomato_in_image(hdr_path, tomato_signature, threshold=0.1):
 
     return masked_hsi, mask
 
-# Example usage
 if __name__ == "__main__":
     # Step 1: Select ROI and extract reference signature from one image
-    reference_image_path = '/workspace/src/Season_4/Normal/cubes/s1_norm10_bbox_2.npy'
+    reference_image_path = "/workspace/src/Season_4/Normal/cubes/s1_norm10_bbox_2.npy"
     tomato_signature = select_roi_and_extract_signature(reference_image_path)
 
-    # Step 2: Apply the reference signature to other images
+    # Step 2: Read all .npy files in the directory dynamically
+    directory_path = "/workspace/src/Season_4/Normal/cubes/"
+    other_image_paths = glob.glob(f"{directory_path}/*.npy")
+
+    # Exclude the reference image and signature file from processing
     other_image_paths = [
-        '/workspace/src/Season_4/Normal/cubes/s1_norm1_bbox_1.npy',
-        '/workspace/src/Season_4/Normal/cubes/s1_norm5_bbox_3.npy',
-        # Add more paths as needed
+        path for path in other_image_paths 
+        if path != reference_image_path and not path.endswith("tomato_sign.npy")
     ]
 
+    # Process each image
     for image_path in other_image_paths:
         print(f"Processing {image_path}...")
         masked_hsi, mask = segment_tomato_in_image(image_path, tomato_signature, threshold=0.17)
