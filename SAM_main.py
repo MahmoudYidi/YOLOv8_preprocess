@@ -35,7 +35,7 @@ def extract_tomato_signature(hsi, roi):
     return tomato_signature
 
 # Function to create a mask for the tomato
-def create_tomato_mask(hsi, tomato_signature, threshold=0.1):
+def create_tomato_mask(hsi, tomato_signature, threshold=0.25): #0.1
     # Compute Spectral Angle Mapper (SAM) similarity
     hsi_flat = hsi.reshape(-1, hsi.shape[2])  # Flatten spatial dimensions
     sam_map = np.array([sam(px, tomato_signature) for px in hsi_flat])
@@ -96,7 +96,8 @@ def select_roi_and_extract_signature(hdr_path):
 
     # Extract the tomato's spectral signature using the normal ROI
     tomato_signature = extract_tomato_signature(hsi, normal_roi)
-    np.save('/workspace/src/Season_4/Normal/cubes/tomato_sign.npy', tomato_signature)
+    #np.save('/workspace/src/Season_4/Normal/cubes/tomato_anom_sign.npy', tomato_signature) ########
+    np.save('/workspace/src/test/tomato_anom_sign.npy', tomato_signature) ########
     print("Tomato signature saved.")
 
     return tomato_signature
@@ -131,7 +132,8 @@ def segment_tomato_in_image(hdr_path, tomato_signature, threshold=0.05):
 if __name__ == "__main__":
     # Step 1: Select ROI and extract reference signature from one image
     #reference_image_path = "/workspace/src/Season_4/Normal/cubes/s1_norm10_bbox_2.npy"
-    reference_image_path = "/workspace/src/Season_4/Normal/masked_cubes/s1_norm1_bbox_1.npy"
+    #reference_image_path = "/workspace/src/Season_4/Normal/masked_cubes/s1_norm1_bbox_1.npy" #real
+    reference_image_path = "/workspace/src/test/test_cubes/test_bbox_1.npy"
     tomato_signature = select_roi_and_extract_signature(reference_image_path)
 
     # Step 2: Read all .npy files in the directory dynamically
@@ -141,7 +143,7 @@ if __name__ == "__main__":
     # Exclude the reference image and signature file from processing
     other_image_paths = [
         path for path in other_image_paths 
-        if path != reference_image_path and not path.endswith("tomato_sign.npy")
+        if path != reference_image_path and not path.endswith("tomato_anom_sign.npy") #########
     ]
 
     # Process each image

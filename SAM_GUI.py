@@ -97,7 +97,7 @@ def select_directory():
         file_list.sort()  # Sort files alphabetically
         if file_list:
             current_index = 0
-            tomato_signature = np.load('/workspace/src/Season_4/Normal/cubes/tomato_sign.npy')
+            tomato_signature = np.load('/workspace/src/Season_4/Normal/tomato_sign.npy')
             process_and_visualize()
         else:
             print("No .npy files found in the selected directory.")
