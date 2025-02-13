@@ -3,3 +3,4 @@ labeller
 cropper (norm and crop)
 SAM analysis
 ready
+Auto-encoder
