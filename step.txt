@@ -4,3 +4,4 @@ cropper (norm and crop)
 SAM analysis
 ready
 Auto-encoder
+GAN
