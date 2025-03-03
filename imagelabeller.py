@@ -2,6 +2,7 @@ import os
 import json
 from tkinter import Tk, Button, Label, filedialog, Canvas, Frame, LEFT, RIGHT
 from PIL import Image, ImageTk
+########
 
 class ImageLabellerApp:
     def __init__(self, root):
