@@ -33,7 +33,7 @@ def apply_mask(hsi, mask):
     return masked_hsi
 
 # Function to process all images in a directory
-def process_images_in_directory(input_dir, output_dir, tomato_signature, threshold=0.25): #0.17
+def process_images_in_directory(input_dir, output_dir, tomato_signature, threshold=0.17): #0.17
     """Process all .npy files in the input directory and save masked images to the output directory."""
     # Ensure the output directory exists
     os.makedirs(output_dir, exist_ok=True)
@@ -64,11 +64,8 @@ def process_images_in_directory(input_dir, output_dir, tomato_signature, thresho
 # Main script
 if __name__ == "__main__":
     # Paths
-    #input_directory = "/workspace/src/Season_4/Normal/cubes/"  # Directory containing .npy files
-    #output_directory = "/workspace/src/Season_4/Normal/masked_cubes/"  # Directory to save masked images
-    #tomato_signature_path = "/workspace/src/Season_4/Normal/tomato_sign.npy"  # Path to the tomato signature
-    input_directory = "/workspace/src/test/test_cubes"  # Directory containing .npy files
-    output_directory = "/workspace/src/test/test_masked"  # Directory to save masked images
+    input_directory = "/workspace/src/extra_norm/cropped"  # Directory containing .npy files
+    output_directory = "/workspace/src/extra_norm/masked"  # Directory to save masked images
     tomato_signature_path = "/workspace/src/test/tomato_anom_sign.npy"  # Path to the tomato signature
 
     # Load the tomato signature

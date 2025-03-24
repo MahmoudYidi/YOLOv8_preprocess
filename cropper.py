@@ -70,21 +70,21 @@ def process_hsi_with_bboxes(json_path, hsi_root_dir, output_dir, dark_path, whit
 if __name__ == "__main__":
     # Path to the JSON file with bounding box coordinates
     #json_path = "/workspace/src/Season_4/normal.json"
-    json_path = "/workspace/src/test/testing.json"
+    json_path = "/workspace/src/extra_norm/extra_norm.json"
 
     # Root directory containing HSI folders (e.g., s1_norm1, s1_norm2, etc.)
     #hsi_root_dir = "/workspace/src/Season_4/Normal/hsi"
-    hsi_root_dir = "/workspace/src/test"
+    hsi_root_dir = "/workspace/src/extra_norm/hsi"
 
     # Output directory to save cropped hyperspectral cubes
     #output_dir = "/workspace/src/Season_4/Normal/cubes"
-    output_dir = "/workspace/src/test/test_cubes"
+    output_dir = "/workspace/src/extra_norm/cropped"
 
     # Paths to dark and white reference images
     #dark_path = "/workspace/src/Season_4/dark_ref/capture/dark_ref.hdr"
     #white_path = "/workspace/src/Season_4/white_ref/capture/white_ref.hdr"
-    dark_path = "/workspace/src/dataset/hsi/dark_ref_shutter_cap_on/capture/dark_ref_shutter_2024-01-26_16-03-56.hdr"
-    white_path = "/workspace/src/dataset/hsi/white_ref_2024-01-26_16-00-30/capture/white_ref_2024-01-26_16-00-30.hdr"
+    dark_path = "/workspace/src/extra_norm/white_dark/dark_ref_shutter_cap_on/capture/dark_ref_shutter_2024-01-26_16-03-56.hdr"
+    white_path = "/workspace/src/extra_norm/white_dark/white_ref_2024-01-26_16-00-30/capture/white_ref_2024-01-26_16-00-30.hdr"
 
     # Process the HSI images using the bounding boxes
     process_hsi_with_bboxes(json_path, hsi_root_dir, output_dir, dark_path, white_path)

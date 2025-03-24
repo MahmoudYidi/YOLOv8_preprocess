@@ -25,7 +25,7 @@ hsi_normalized = hsi_data / np.max(hsi_data)
 #display_band(hsi_normalized, 30)
 
 # Display one of the bands (e.g., the first band)
-band_to_display = 152  # Change this to display a different band
+band_to_display = 152  
 plt.figure(figsize=(8, 8))
 plt.imshow(hsi_normalized[:, :, band_to_display], cmap='gray')
 plt.title('Select ROIs: Draw a box for Normal and Anomalous Regions')
