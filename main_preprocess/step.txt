@@ -1,0 +1,7 @@
+process
+labeller
+cropper (norm and crop)
+SAM analysis (SAMGUI)
+SAM Masking (threshold correct)
+Mask Visualise (inspect)
+ready
