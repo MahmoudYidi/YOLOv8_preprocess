@@ -3,6 +3,7 @@ labeller
 cropper (norm and crop)
 SAM analysis (SAMGUI)
 SAM Masking 
+Mask Visualise
 ready
 Auto-encoder
 GAN
