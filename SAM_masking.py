@@ -35,7 +35,7 @@ def apply_mask(hsi, mask):
 # Function to process all images in a directory
 def process_images_in_directory(input_dir, output_dir, tomato_signature, threshold=0.17): #0.17
     """Process all .npy files in the input directory and save masked images to the output directory."""
-    # Ensure the output directory exists
+    # Ensure the output directory exists ##
     os.makedirs(output_dir, exist_ok=True)
 
     # Get all .npy files in the input directory
