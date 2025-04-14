@@ -55,14 +55,14 @@ def process_and_visualize():
     hsi = np.load(hsi_path)
 
     # Create the tomato mask
-    mask = create_tomato_mask(hsi, tomato_signature, threshold=0.17)
+    mask = create_tomato_mask(hsi, tomato_signature, threshold=0.11)
     mask = clean_mask(mask)
 
     # Apply the mask to the HSI
     masked_hsi = apply_mask(hsi, mask)
 
     # Overlay the mask on a specific band (e.g., band 0)
-    overlay = overlay_mask_on_band(hsi, mask, band_index=0)
+    overlay = overlay_mask_on_band(hsi, mask, band_index=15)
 
     # Convert the overlay to a PIL image
     overlay_normalized = (overlay - overlay.min()) / (overlay.max() - overlay.min())  # Normalize to [0, 1]

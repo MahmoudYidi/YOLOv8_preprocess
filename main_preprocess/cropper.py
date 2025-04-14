@@ -70,15 +70,15 @@ def process_hsi_with_bboxes(json_path, hsi_root_dir, output_dir, dark_path, whit
 if __name__ == "__main__":
     # Path to the JSON file with bounding box coordinates
     #json_path = "/workspace/src/Season_4/normal.json"
-    json_path = "/workspace/src/extra_norm/extra_norm.json"
+    json_path = "/workspace/src/extra_norm/extra_anom_norm.json"
 
     # Root directory containing HSI folders (e.g., s1_norm1, s1_norm2, etc.)
     #hsi_root_dir = "/workspace/src/Season_4/Normal/hsi"
-    hsi_root_dir = "/workspace/src/extra_norm/hsi"
+    hsi_root_dir = "/workspace/src/Session1/hsi"
 
     # Output directory to save cropped hyperspectral cubes
     #output_dir = "/workspace/src/Season_4/Normal/cubes"
-    output_dir = "/workspace/src/extra_norm/cropped"
+    output_dir = "/workspace/src/extra_norm/cropped2"
 
     # Paths to dark and white reference images
     #dark_path = "/workspace/src/Season_4/dark_ref/capture/dark_ref.hdr"
