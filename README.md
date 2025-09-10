@@ -1,7 +1,6 @@
 # 🛠️ YOLOv8 Preprocessing Utilities
-
-This repository provides a suite of preprocessing tools designed to streamline the preparation of datasets using YOLOv8 object detection models. These utilities facilitate tasks such as background removal, image cropping, annotation visualization, and batch processing, ensuring the hyperspectral data is ready for efficient training and inference.
 ---
+This repository provides a suite of preprocessing tools designed to streamline the preparation of datasets using YOLOv8 object detection models. These utilities facilitate tasks such as background removal, image cropping, annotation visualization, and batch processing, ensuring the hyperspectral data is ready for efficient training and inference.
 
 ## 🔧 Features
 
