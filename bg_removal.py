@@ -1,3 +1,27 @@
+from sklearn.decomposition import PCA
+
+PCA_DIM = 256  # try 128, 256, 512 depending on speed/accuracy
+
+pca = PCA(n_components=PCA_DIM, whiten=True, random_state=0)
+memory_p = pca.fit_transform(memory)
+
+# save PCA + projected memory
+import joblib
+joblib.dump(pca, os.path.join(OUT_DIR, "pca.joblib"))
+np.save(os.path.join(OUT_DIR, "memory_pca.npy"), memory_p)
+
+# fit knn on projected memory
+knn = NearestNeighbors(n_neighbors=5, algorithm="auto", metric="euclidean")
+knn.fit(memory_p)
+joblib.dump(knn, os.path.join(OUT_DIR, "knn.joblib"))
+
+
+pca = joblib.load(os.path.join(MODEL_DIR, "pca.joblib"))
+
+patches_p = pca.transform(patches)  # patches is (num_patches, C)
+dists, _ = knn.kneighbors(patches_p, n_neighbors=5, return_distance=True)
+patch_scores = dists.mean(axis=1).astype(np.float32)
+
 import os, json, glob
 import numpy as np
 from tqdm import tqdm
