@@ -1,3 +1,136 @@
+import numpy as np
+import cv2
+from dataclasses import dataclass
+from typing import Tuple, Optional
+
+EPS = 1e-6
+
+@dataclass
+class MultiViewCfg:
+    # Robust scaling (calibration-free)
+    raw_clip_p: Tuple[float, float] = (0.5, 99.5)
+    norm8_clip_p: Tuple[float, float] = (0.5, 99.5)
+
+    # Very light denoise
+    denoise_raw: bool = True
+    denoise_ksize: int = 3  # median 3x3 is safe
+
+    # Edge view (safe, deterministic)
+    edge_blur_ksize: int = 3       # small pre-blur before Sobel
+    edge_strength: float = 0.75    # how much edge magnitude is added to raw view
+    edge_p: Tuple[float, float] = (5.0, 99.0)  # robust normalize gradient magnitude
+
+
+def robust01(x: np.ndarray, p_low: float, p_high: float) -> np.ndarray:
+    """Robust normalize to [0,1] using percentiles (per image)."""
+    x = x.astype(np.float32, copy=False)
+    lo = np.percentile(x, p_low)
+    hi = np.percentile(x, p_high)
+    if hi <= lo:
+        return np.zeros_like(x, dtype=np.float32)
+    x = np.clip(x, lo, hi)
+    x = (x - lo) / (hi - lo + EPS)
+    return np.clip(x, 0.0, 1.0).astype(np.float32)
+
+
+def median_denoise01(x01: np.ndarray, ksize: int = 3) -> np.ndarray:
+    """Median blur on [0,1] image via uint8."""
+    u8 = (np.clip(x01, 0.0, 1.0) * 255.0).astype(np.uint8)
+    u8 = cv2.medianBlur(u8, ksize)
+    return u8.astype(np.float32) / 255.0
+
+
+def edge_enhanced_view_from_raw(raw01: np.ndarray, cfg: MultiViewCfg) -> np.ndarray:
+    """
+    Create an edge-enhanced view from raw01 using Sobel magnitude.
+    Returns [0,1] float32.
+    """
+    u8 = (np.clip(raw01, 0.0, 1.0) * 255.0).astype(np.uint8)
+
+    if cfg.edge_blur_ksize and cfg.edge_blur_ksize > 1:
+        u8 = cv2.GaussianBlur(u8, (cfg.edge_blur_ksize, cfg.edge_blur_ksize), 0)
+
+    gx = cv2.Sobel(u8, cv2.CV_32F, 1, 0, ksize=3)
+    gy = cv2.Sobel(u8, cv2.CV_32F, 0, 1, ksize=3)
+    mag = cv2.magnitude(gx, gy)
+
+    lo = np.percentile(mag, cfg.edge_p[0])
+    hi = np.percentile(mag, cfg.edge_p[1])
+    mag01 = (mag - lo) / (hi - lo + EPS)
+    mag01 = np.clip(mag01, 0.0, 1.0).astype(np.float32)
+
+    # Edge-enhanced (not pure edges): helps small bones without destroying tone
+    out = raw01 + cfg.edge_strength * mag01
+    return np.clip(out, 0.0, 1.0).astype(np.float32)
+
+
+def ensure_gray(x: np.ndarray) -> np.ndarray:
+    """Ensure 2D grayscale float/uint input returns 2D array."""
+    if x.ndim == 2:
+        return x
+    if x.ndim == 3 and x.shape[-1] == 1:
+        return x[..., 0]
+    raise ValueError(f"Expected grayscale 2D, got shape {x.shape}")
+
+
+def rgb8_to_gray01(rgb8: np.ndarray) -> np.ndarray:
+    """Convert uint8 RGB/BGR to grayscale [0,1]."""
+    if rgb8.ndim != 3 or rgb8.shape[-1] != 3:
+        raise ValueError(f"Expected (H,W,3) RGB8, got {rgb8.shape}")
+    # If your array is BGR (OpenCV), use cv2.COLOR_BGR2GRAY instead.
+    gray = cv2.cvtColor(rgb8, cv2.COLOR_RGB2GRAY)
+    return gray.astype(np.float32) / 255.0
+
+
+def make_multiview_input(
+    raw16: np.ndarray,
+    gray8_norm: np.ndarray,
+    rgb8: Optional[np.ndarray] = None,
+    cfg: MultiViewCfg = MultiViewCfg(),
+) -> np.ndarray:
+    """
+    Build a 3-channel input (H,W,3) float32 in [0,1]:
+      ch0 = raw16 robust normalized
+      ch1 = gray8_norm stabilized
+      ch2 = edge-enhanced view from raw16
+
+    rgb8 is optional; included only if you want to sanity-check or swap views later.
+    """
+    raw16 = ensure_gray(raw16)
+    gray8_norm = ensure_gray(gray8_norm)
+
+    # View A: raw16 -> [0,1]
+    raw01 = robust01(raw16, *cfg.raw_clip_p)
+
+    # Optional light denoise on raw view only
+    if cfg.denoise_raw:
+        raw01 = median_denoise01(raw01, cfg.denoise_ksize)
+
+    # View B: 8-bit normalized gray -> [0,1] (stabilize with robust01 in case it isn't perfect)
+    # If gray8_norm is already uint8 0..255, robust01 handles it fine.
+    g01 = robust01(gray8_norm, *cfg.norm8_clip_p)
+
+    # View C: edge-enhanced from raw
+    edge01 = edge_enhanced_view_from_raw(raw01, cfg)
+
+    # Stack into multiview (H,W,3)
+    mv = np.stack([raw01, g01, edge01], axis=-1).astype(np.float32)
+
+    return mv
+
+
+# ----------------------------
+# Example usage with .npy
+# ----------------------------
+if __name__ == "__main__":
+    raw16 = np.load("raw16.npy")          # (H,W) uint16 or float
+    gray8 = np.load("gray8_norm.npy")     # (H,W) uint8 or float
+    rgb8  = np.load("rgb8.npy")           # (H,W,3) uint8 (optional)
+
+    mv = make_multiview_input(raw16, gray8, rgb8=rgb8)
+    np.save("multiview_input.npy", mv)    # (H,W,3) float32 in [0,1]
+
+
 from sklearn.decomposition import PCA
 
 PCA_DIM = 256  # try 128, 256, 512 depending on speed/accuracy
