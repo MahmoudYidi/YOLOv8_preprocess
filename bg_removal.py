@@ -1,3 +1,260 @@
+import os, json, math, random
+from dataclasses import dataclass
+from typing import Any, Dict, List, Tuple
+
+import numpy as np
+import torch
+from torch.utils.data import Dataset, DataLoader
+
+from transformers import AutoImageProcessor, DFineForObjectDetection
+
+
+# ----------------------------
+# Config
+# ----------------------------
+@dataclass
+class TrainCfg:
+    checkpoint: str = "ustc-community/dfine_n_coco"
+    images_dir: str = "data/multiview_npy"     # <-- your 3ch preprocessed .npy folder
+    ann_json: str = "data/annotations.json"   # COCO format JSON
+
+    class_names: Tuple[str, ...] = ("bone",)  # single-class
+    epochs: int = 30
+    batch_size: int = 4
+    lr: float = 2e-4
+    weight_decay: float = 1e-4
+    grad_clip_norm: float = 0.1
+    num_workers: int = 4
+
+    amp: bool = True
+    grad_accum: int = 1
+    freeze_backbone_epochs: int = 1
+
+    out_dir: str = "runs/dfine_nano_multiview"
+    seed: int = 0
+
+
+CFG = TrainCfg()
+EPS = 1e-6
+
+
+# ----------------------------
+# Utilities
+# ----------------------------
+def set_seed(seed: int):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
+
+def ensure_hwc3(x: np.ndarray) -> np.ndarray:
+    """Accept (H,W,3) or (3,H,W), return (H,W,3)."""
+    if x.ndim != 3:
+        raise ValueError(f"Expected 3D array, got shape {x.shape}")
+    if x.shape[-1] == 3:
+        return x
+    if x.shape[0] == 3:
+        return np.transpose(x, (1, 2, 0))
+    raise ValueError(f"Cannot infer channel axis for shape {x.shape}")
+
+
+def mv01_to_uint8(mv01: np.ndarray) -> np.ndarray:
+    """
+    Your multiview input is float32 in [0,1].
+    Convert to uint8 RGB-like array for HF processor.
+    """
+    mv01 = mv01.astype(np.float32, copy=False)
+    mv01 = np.clip(mv01, 0.0, 1.0)
+    return (mv01 * 255.0 + 0.5).astype(np.uint8)
+
+
+def load_coco(coco_json_path: str):
+    with open(coco_json_path, "r") as f:
+        coco = json.load(f)
+    images_by_id = {img["id"]: img for img in coco["images"]}
+    ann_by_image = {img_id: [] for img_id in images_by_id.keys()}
+    for ann in coco["annotations"]:
+        if ann.get("iscrowd", 0) == 1:
+            continue
+        img_id = ann["image_id"]
+        if img_id in ann_by_image:
+            ann_by_image[img_id].append(ann)
+    return coco, images_by_id, ann_by_image
+
+
+# ----------------------------
+# Dataset
+# ----------------------------
+class MultiViewCocoDataset(Dataset):
+    """
+    Loads 3-channel multiview npy (float32 [0,1]) and COCO bboxes.
+    Uses AutoImageProcessor to create DETR-style labels.
+    """
+    def __init__(
+        self,
+        images_dir: str,
+        coco_json: str,
+        processor: AutoImageProcessor,
+        category_id_to_label: Dict[int, int],
+    ):
+        self.images_dir = images_dir
+        self.processor = processor
+        self.category_id_to_label = category_id_to_label
+
+        _, self.images_by_id, self.ann_by_image = load_coco(coco_json)
+        self.image_ids = sorted(self.images_by_id.keys())
+
+    def __len__(self):
+        return len(self.image_ids)
+
+    def __getitem__(self, idx: int) -> Dict[str, Any]:
+        image_id = self.image_ids[idx]
+        img_info = self.images_by_id[image_id]
+
+        # IMPORTANT: file_name must point to your preprocessed multiview .npy
+        npy_path = os.path.join(self.images_dir, img_info["file_name"])
+        mv = np.load(npy_path)  # (H,W,3) float32 [0,1] (or (3,H,W))
+        mv = ensure_hwc3(mv)
+
+        # Convert to uint8 for processor
+        img_u8 = mv01_to_uint8(mv)
+
+        anns = []
+        for a in self.ann_by_image.get(image_id, []):
+            cat_id = a["category_id"]
+            if cat_id not in self.category_id_to_label:
+                continue
+            bbox = a["bbox"]  # [x,y,w,h] in pixels
+            anns.append({
+                "bbox": bbox,
+                "category_id": self.category_id_to_label[cat_id],
+                "area": a.get("area", float(bbox[2] * bbox[3])),
+                "iscrowd": 0,
+            })
+
+        target = {"image_id": image_id, "annotations": anns}
+
+        encoding = self.processor(images=img_u8, annotations=target, return_tensors="pt")
+        return {k: v.squeeze(0) for k, v in encoding.items()}
+
+
+def make_collate_fn(processor: AutoImageProcessor):
+    def collate_fn(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
+        pixel_values = [b["pixel_values"] for b in batch]
+        padded = processor.pad({"pixel_values": pixel_values}, return_tensors="pt")
+        out = {"pixel_values": padded["pixel_values"]}
+        if "pixel_mask" in padded:
+            out["pixel_mask"] = padded["pixel_mask"]
+        out["labels"] = [b["labels"] for b in batch]
+        return out
+    return collate_fn
+
+
+# ----------------------------
+# Train
+# ----------------------------
+def main(cfg: TrainCfg):
+    set_seed(cfg.seed)
+    os.makedirs(cfg.out_dir, exist_ok=True)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # Processor: keep defaults; we already give uint8 images.
+    processor = AutoImageProcessor.from_pretrained(cfg.checkpoint)
+
+    # Model: change head to your classes
+    model = DFineForObjectDetection.from_pretrained(
+        cfg.checkpoint,
+        num_labels=len(cfg.class_names),
+        ignore_mismatched_sizes=True,
+    )
+
+    model.config.id2label = {i: n for i, n in enumerate(cfg.class_names)}
+    model.config.label2id = {n: i for i, n in enumerate(cfg.class_names)}
+
+    # Build category_id -> contiguous label map from COCO categories
+    coco, _, _ = load_coco(cfg.ann_json)
+    name_to_catid = {c["name"]: c["id"] for c in coco.get("categories", [])}
+    category_id_to_label = {}
+    for i, name in enumerate(cfg.class_names):
+        if name not in name_to_catid:
+            raise ValueError(f"Class '{name}' not found in JSON categories. Found: {list(name_to_catid.keys())}")
+        category_id_to_label[name_to_catid[name]] = i
+
+    train_ds = MultiViewCocoDataset(cfg.images_dir, cfg.ann_json, processor, category_id_to_label)
+    train_loader = DataLoader(
+        train_ds,
+        batch_size=cfg.batch_size,
+        shuffle=True,
+        num_workers=cfg.num_workers,
+        pin_memory=True,
+        collate_fn=make_collate_fn(processor),
+    )
+
+    model.to(device)
+
+    # Optional speed optimization (PyTorch 2.x)
+    if hasattr(torch, "compile") and device.type == "cuda":
+        try:
+            model = torch.compile(model)
+        except Exception as e:
+            print(f"[WARN] torch.compile failed: {e}")
+
+    optim = torch.optim.AdamW(model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
+    scaler = torch.cuda.amp.GradScaler(enabled=(cfg.amp and device.type == "cuda"))
+
+    model.train()
+    optim.zero_grad(set_to_none=True)
+
+    for epoch in range(cfg.epochs):
+        # warmup freeze backbone (helps small datasets)
+        if epoch < cfg.freeze_backbone_epochs:
+            model.model.backbone.requires_grad_(False)
+        else:
+            model.model.backbone.requires_grad_(True)
+
+        running = 0.0
+        for step, batch in enumerate(train_loader):
+            pixel_values = batch["pixel_values"].to(device, non_blocking=True)
+            pixel_mask = batch.get("pixel_mask", None)
+            if pixel_mask is not None:
+                pixel_mask = pixel_mask.to(device, non_blocking=True)
+
+            labels = [{k: v.to(device) for k, v in t.items()} for t in batch["labels"]]
+
+            with torch.cuda.amp.autocast(enabled=(cfg.amp and device.type == "cuda")):
+                out = model(pixel_values=pixel_values, pixel_mask=pixel_mask, labels=labels)
+                loss = out.loss / cfg.grad_accum
+
+            scaler.scale(loss).backward()
+
+            if (step + 1) % cfg.grad_accum == 0:
+                scaler.unscale_(optim)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.grad_clip_norm)
+                scaler.step(optim)
+                scaler.update()
+                optim.zero_grad(set_to_none=True)
+
+            running += loss.item() * cfg.grad_accum
+
+            if (step + 1) % max(1, len(train_loader) // 5) == 0:
+                print(f"epoch {epoch+1:03d}/{cfg.epochs} step {step+1:04d}/{len(train_loader)} loss {running/(step+1):.4f}")
+
+        # Save
+        save_dir = os.path.join(cfg.out_dir, f"epoch_{epoch+1:03d}")
+        os.makedirs(save_dir, exist_ok=True)
+        model_to_save = model._orig_mod if hasattr(model, "_orig_mod") else model
+        model_to_save.save_pretrained(save_dir)
+        processor.save_pretrained(save_dir)
+        print(f"[OK] saved {save_dir}")
+
+    print("[DONE]")
+
+
+if __name__ == "__main__":
+    main(CFG)
+
+
 import numpy as np
 import cv2
 from dataclasses import dataclass
