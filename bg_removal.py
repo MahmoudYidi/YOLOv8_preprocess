@@ -1,3 +1,68 @@
+def add_synthetic_anomaly(image):
+
+    img = image.clone()
+    mask = torch.zeros_like(img)
+
+    B, C, H, W = img.shape
+
+    for i in range(B):
+
+        anomaly_type = random.choice([
+            "blob",
+            "patch",
+            "crack",
+            "noise"
+        ])
+
+        size = random.randint(10, 40)
+
+        x = random.randint(0, H - size)
+        y = random.randint(0, W - size)
+
+        if anomaly_type == "blob":
+
+            blob = torch.ones((1, size, size))
+            intensity = random.uniform(0.5, 2.0)
+
+            img[i,:,x:x+size,y:y+size] -= blob * intensity
+            mask[i,:,x:x+size,y:y+size] = 1
+
+
+        elif anomaly_type == "patch":
+
+            patch = torch.randn((1,size,size))
+            patch = torch.abs(patch)
+
+            img[i,:,x:x+size,y:y+size] -= patch
+            mask[i,:,x:x+size,y:y+size] = 1
+
+
+        elif anomaly_type == "crack":
+
+            length = random.randint(20,60)
+
+            x0 = random.randint(0,H-1)
+            y0 = random.randint(0,W-1)
+
+            for j in range(length):
+
+                xi = min(H-1, x0 + j)
+                yi = min(W-1, y0 + j//2)
+
+                img[i,:,xi,yi] -= 2
+                mask[i,:,xi,yi] = 1
+
+
+        elif anomaly_type == "noise":
+
+            noise = torch.randn((1,size,size))*2
+            img[i,:,x:x+size,y:y+size] -= torch.abs(noise)
+            mask[i,:,x:x+size,y:y+size] = 1
+
+
+    return img, mask
+
+
 import os
 import random
 import numpy as np
