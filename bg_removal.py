@@ -1,3 +1,226 @@
+import os
+import random
+import numpy as np
+import torch
+import torch.nn as nn
+from torch.utils.data import Dataset, DataLoader
+
+
+############################################
+# DATASET
+############################################
+
+class NPYDataset(Dataset):
+
+    def __init__(self, root_dir, mean_image):
+
+        self.paths = [
+            os.path.join(root_dir, f)
+            for f in os.listdir(root_dir)
+            if f.endswith(".npy")
+        ]
+
+        self.mean_image = mean_image
+
+    def __len__(self):
+        return len(self.paths)
+
+    def __getitem__(self, idx):
+
+        img = np.load(self.paths[idx]).astype(np.float32)
+
+        # normalize
+        img = (img - img.mean()) / (img.std() + 1e-8)
+
+        # subtract template
+        img = img - self.mean_image
+
+        img = torch.tensor(img).unsqueeze(0)
+
+        return img
+
+
+############################################
+# SYNTHETIC ANOMALY GENERATOR
+############################################
+
+def add_synthetic_anomaly(image):
+
+    img = image.clone()
+    mask = torch.zeros_like(img)
+
+    B, C, H, W = img.shape
+
+    for i in range(B):
+
+        size = random.randint(10, 40)
+
+        x = random.randint(0, H - size)
+        y = random.randint(0, W - size)
+
+        # darker anomaly (important for X-ray density defects)
+        noise = torch.abs(torch.randn((1, size, size))) * 2
+
+        img[i, :, x:x+size, y:y+size] -= noise
+        mask[i, :, x:x+size, y:y+size] = 1
+
+    return img, mask
+
+
+############################################
+# RECONSTRUCTION NETWORK
+############################################
+
+class ReconstructionNet(nn.Module):
+
+    def __init__(self):
+        super().__init__()
+
+        self.encoder = nn.Sequential(
+            nn.Conv2d(1, 32, 4, 2, 1),
+            nn.ReLU(),
+            nn.Conv2d(32, 64, 4, 2, 1),
+            nn.ReLU(),
+            nn.Conv2d(64, 128, 4, 2, 1),
+            nn.ReLU()
+        )
+
+        self.decoder = nn.Sequential(
+            nn.ConvTranspose2d(128, 64, 4, 2, 1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(64, 32, 4, 2, 1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(32, 1, 4, 2, 1)
+        )
+
+    def forward(self, x):
+
+        z = self.encoder(x)
+        return self.decoder(z)
+
+
+############################################
+# SEGMENTATION NETWORK
+############################################
+
+class SegmentationNet(nn.Module):
+
+    def __init__(self):
+        super().__init__()
+
+        self.net = nn.Sequential(
+            nn.Conv2d(2, 32, 3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(32, 32, 3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(32, 1, 1)
+        )
+
+    def forward(self, x):
+
+        return torch.sigmoid(self.net(x))
+
+
+############################################
+# DRAEM MODEL
+############################################
+
+class DRAEM(nn.Module):
+
+    def __init__(self):
+        super().__init__()
+
+        self.reconstruction = ReconstructionNet()
+        self.segmentation = SegmentationNet()
+
+    def forward(self, corrupted):
+
+        recon = self.reconstruction(corrupted)
+
+        inp = torch.cat([corrupted, recon], dim=1)
+
+        seg = self.segmentation(inp)
+
+        return recon, seg
+
+
+############################################
+# TRAINING
+############################################
+
+def main():
+
+    data_dir = "data/train"
+    batch_size = 8
+    epochs = 50
+    lr = 1e-4
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    print("Loading dataset...")
+
+    files = [
+        np.load(os.path.join(data_dir, f))
+        for f in os.listdir(data_dir)
+        if f.endswith(".npy")
+    ]
+
+    mean_image = np.mean(files, axis=0).astype(np.float32)
+
+    dataset = NPYDataset(data_dir, mean_image)
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+    model = DRAEM().to(device)
+
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+
+    mse = nn.MSELoss()
+    bce = nn.BCELoss()
+
+    print("Training started...")
+
+    for epoch in range(epochs):
+
+        epoch_loss = 0
+
+        for img in loader:
+
+            img = img.to(device)
+
+            corrupted, mask = add_synthetic_anomaly(img)
+
+            corrupted = corrupted.to(device)
+            mask = mask.to(device)
+
+            recon, seg = model(corrupted)
+
+            loss_recon = mse(recon, img)
+            loss_seg = bce(seg, mask)
+
+            loss = loss_recon + loss_seg
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            epoch_loss += loss.item()
+
+        epoch_loss /= len(loader)
+
+        print(f"Epoch {epoch+1}/{epochs}  Loss: {epoch_loss:.4f}")
+
+    print("Saving model...")
+
+    torch.save(model.state_dict(), "draem_model.pth")
+    np.save("mean_image.npy", mean_image)
+
+    print("Training complete")
+
+
+if __name__ == "__main__":
+    main()
+
+
 import os, json, math, random
 from dataclasses import dataclass
 from typing import Any, Dict, List, Tuple
